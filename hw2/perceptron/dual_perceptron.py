@@ -10,10 +10,8 @@ class DualPerceptron:
         data = np.c_[np.ones(len(data)), data]
         sample_count = len(data)
 
-        k = np.zeros((sample_count, sample_count))
-        for i in range(sample_count):
-            for j in range(sample_count):
-                k[i, j] = self.kernel(data[i,:-1], data[j,:-1])
+        k = np.fromfunction(np.vectorize(lambda i, j: self.kernel(data[i,:-1], data[j,:-1])),
+                            (sample_count, sample_count), dtype=np.int)
 
         self.m = np.zeros(sample_count, dtype=np.float64)
         updates = 0
