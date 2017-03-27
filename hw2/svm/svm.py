@@ -4,8 +4,16 @@ import numpy as np
 import pandas as pd
 
 class SVM:
+    """
+    SVM is a dual form representation of a Support Vector Machine.
+    """
 
     def __init__(self, kernel, trainer):
+        """
+        Init the Model
+        :param kernel: The kernel function to use
+        :param trainer: The Training algorithm to use.
+        """
         self.kernel = kernel
         self.support_vectors = None
         self.sv_y = None
@@ -14,12 +22,23 @@ class SVM:
         self.trainer = trainer
 
     def train(self, x, y, **trainer_args):
+        """
+        Train the model on the data
+        :param x: The array containing features of the data
+        :param y: The array containing labels of the data
+        :param trainer_args: The arguments for the trainer
+        """
         self.support_vectors,\
         self.sv_y,\
         self.sv_alphas,\
         self.bias = self.trainer.train(self.kernel, x, y, **trainer_args)
 
     def predict(self, point):
+        """
+        Predict the class of a point
+        :param point: The point to predict
+        :return: The predicted class fo the point
+        """
         assert self.support_vectors is not None
         assert self.sv_y is not None
         assert self.sv_alphas is not None
@@ -31,7 +50,25 @@ class SVM:
 
 
 class SMOTrainer:
+    """
+    SMO Trainer is class that can find the support vectors for a SVM using the
+    SMO algorithm.
+    """
+
     def train(self, kernel, x, y, clean_passes, tolerance, reg_factor):
+        """
+        Train an SVM model
+        :param kernel: The kernel function to use
+        :param x: An array containing datapoints
+        :param y: An array containing the labels of the data points
+        :param clean_passes: The number of clean_passes required to finish training
+        :param tolerance: The tolerance of the model
+        :param reg_factor: The regularization factor of the model
+        :return: x[sv] - The features of the support vectors,
+                y[sv] - The labels of the support vectors,
+                alphas[sv] - The alphas of the support vectors,
+                bias - The bias of the model.
+        """
         sample_count = len(x)
         alphas = np.zeros(sample_count)
         bias = 0
@@ -92,24 +129,63 @@ class SMOTrainer:
         return x[sv], y[sv], alphas[sv], bias
 
     def calc_l(self, alphas, C, i, j, y):
+        """
+        Calculate l according to the formula
+        :param alphas: The array containing alphas
+        :param C: The regularization factor
+        :param i: An index
+        :param j: Another index
+        :param y: The array containing labels
+        :return: l
+        """
         if y[i] == y[j]:
             return max(0, alphas[i] + alphas[j] - C)
         else:
             return max(0, alphas[j] - alphas[i])
 
     def calc_h(self, alphas, C, i, j, y):
+        """
+        Calculate h according to the formula
+        :param alphas: The array containing alphas
+        :param C: The regularization factor
+        :param i: An index
+        :param j: Another index
+        :param y: The array containing labels
+        :return: h
+        """
         if y[i] == y[j]:
             return min(C, alphas[i] + alphas[j])
         else:
             return min(C, C + alphas[j] - alphas[i])
 
     def calc_n(self, x, i, j):
+        """
+        Calculate n according to the formula
+        :param x: The array containing all x points
+        :param i: An index into x
+        :param j: Anothr index into x
+        :return: n
+        """
         return 2 * np.dot(x[i], x[j]) - np.dot(x[i], x[i]) - np.dot(x[j], x[j])
 
     def calc_error(self, k, idx, y, alphas, bias):
+        """
+        Calculate the error between the prediction of a point and it's actual label
+        :param k: The matrix of kernels
+        :param idx: The index of the point
+        :param y: The array containing all labels
+        :param alphas: The array containing all alphas
+        :param bias: The bias of the model
+        :return: The error between y_pred and y_actual.
+        """
         return bias + np.sum(alphas * y * k[:, idx]) - y[idx]
 
     def random_int_excluding_i(self, max_val, i):
+        """
+        :param max_val: The max_val, exclusive
+        :param i: The exlucded value
+        :return: a random int < max_val that is not i
+        """
         j = random.randrange(max_val - 1)
         return max_val - 1 if j == i else j
 
@@ -117,6 +193,22 @@ class SMOTrainer:
                   error_i, error_j,
                   new_alpha_i, old_alpha_i,
                   new_alpha_j, old_alpha_j, reg_factor):
+        """
+        Calculate the new bias
+        :param bias: The previous bias
+        :param x: The numpy array containing all training x points
+        :param y: The numpy array containing all training labels
+        :param i: The index of a point
+        :param j: The index of a different point
+        :param error_i: The error between the models prediction of point i and the actual
+        :param error_j: The error between the models prediction of point j and the actual
+        :param new_alpha_i: The new alpha of i
+        :param old_alpha_i: The old alpha of i
+        :param new_alpha_j: The new alpha of j
+        :param old_alpha_j: The old alpha of j
+        :param reg_factor: The regularization factor, C
+        :return:
+        """
         b1 = bias - error_i - y[i] * (new_alpha_i - old_alpha_i) \
                               * np.dot(x[i], x[i]) - y[j] * (new_alpha_j - old_alpha_j) * np.dot(x[i], x[j])
         b2 = bias - error_j - y[i] * (new_alpha_i - old_alpha_i) \

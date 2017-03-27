@@ -2,11 +2,26 @@
 import numpy as np
 
 class DualPerceptron:
+    """
+    This is a perceptron that uses the dual form and can
+    take a kernel to match non-linear patterns in data.
+    """
 
     def __init__(self, kernel):
+        """
+        :param kernel: A functions that performs the kernel operation.
+        """
         self.kernel = kernel
 
     def train(self, data):
+        """
+        Train the model on the data
+        :param data: A numpy array containing a series of datapoints,
+            where the last item in each row is the label {-1, 1}
+        :return: The number of iterations over the data,
+            the number of updates performed,
+            the number of support vectors
+        """
         data = np.c_[np.ones(len(data)), data]
         sample_count = len(data)
 
@@ -36,6 +51,11 @@ class DualPerceptron:
         return iterations, updates, len(self.m)
 
     def predict(self, point):
+        """
+        Predict the class {-1, 1} of a datapoint
+        :param point: The datapoint to predict
+        :return: The class of the datapoint
+        """
         point = np.append(np.ones(1), point)
         s = 0
         for m, sv in zip(self.m, self.sv):
@@ -47,6 +67,10 @@ class DualPerceptron:
 
     @property
     def weights(self):
+        """
+        Access The weights of the model as though it were in the primal form
+        :return: The weights of the model.
+        """
         features = len(self.sv[0]) - 2
         weights = [0] * features
         for m, sv in zip(self.m, self.sv):
@@ -56,39 +80,47 @@ class DualPerceptron:
 
     @property
     def normalized_weights(self):
+        """
+        Access the normalized weights of the model: weights / bias
+        :return: The normalized weights of the model.
+        """
         bias = self.bias
-        return [weight / bias for weight in self.weights]
+        return [weight / -bias for weight in self.weights]
 
     @property
     def bias(self):
+        """
+        Access the bias of the function.
+        :return: The bias of the function
+        """
         bias = 0
         for m, sv in zip(self.m, self.sv):
             bias += m * sv[0] * sv[-1]
         return bias
 
 
-def measure_accuracy(df, model):
+def measure_accuracy(data, model):
     """
     Measure the number of accurate predictions over a body of points.
-    :param df: The dataframe containing the points to test against.
+    :param data: The numpy array containing the points to test against.
     :param model: The model to test the points against.
     :return: The number of accurate guesses, and the number of total guesses.
     """
     accurate = 0
-    for row in df:
+    for row in data:
         accurate += 1 if model.predict(row[:-1]) == row[-1] else 0
-    return accurate, len(df)
+    return accurate, len(data)
 
 def main():
-    df = np.genfromtxt("../data/perceptron/percep1.txt", delimiter="\t")
-    #df = np.genfromtxt("../data/perceptron/percep2.txt", delimiter="\t")
+    #df = np.genfromtxt("../data/perceptron/percep1.txt", delimiter="\t")
+    df = np.genfromtxt("../data/perceptron/percep2.txt", delimiter="\t")
     #np.random.shuffle(df)
 
     df_training = df[:900]
     df_testing = df[-100:]
 
-    kernel = lambda a, b: np.dot(a, b)
-    #kernel = lambda a, b: np.exp(-np.dot(a-b, a-b))
+    #kernel = lambda a, b: np.dot(a, b)
+    kernel = lambda a, b: np.exp(-np.dot(a-b, a-b))
     model = DualPerceptron(kernel)
     iterations, updates, sv_count = model.train(df_training)
     print("Model trained: %d iterations, %d updates" % (iterations, updates))
