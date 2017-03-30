@@ -2,13 +2,18 @@ import numpy as np
 from numpy import linalg as LA
 
 def main():
+    """
+    Run spectral clustering on the data in the problem.
+    """
     m = np.array([[0, 4, 3, 0, 0],
                   [4, 0, 2, 0, 0],
                   [3, 2, 0, 1, 2],
                   [0, 0, 1, 0, 0],
                   [0, 0, 2, 0, 0]], dtype=np.float64)
 
+    # copy the array
     l = np.array(m)
+
     # Create the laplacian matrix
     for i in range(len(l)):
         l[i, i] = -sum(l[i])

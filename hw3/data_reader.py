@@ -1,4 +1,3 @@
-from collections import defaultdict
 from enum import Enum, auto
 
 def read_sentences(filename):

@@ -2,10 +2,12 @@
 This script will create and run a HMM (Hidden Markov Model).
 """
 
-from collections import defaultdict
-import numpy as np
 import math
-import hw3.hmm.data_reader as dr
+from collections import defaultdict
+
+import numpy as np
+
+from hw3.data_reader import *
 
 RARE_WORD = '_RARE_'
 
@@ -46,9 +48,9 @@ class HiddenMarkovModel:
         """
         Get the probability of seeing tag_k at point k, given the
         word being tagged, tag_k2, tag_k1, and previous probabilities.
-        :param probs: A dict containing the probailities of lower levels of the
+        :param probs: A dict containing the probabilities of lower levels of the
             viterbi algorithm.
-            probs[k][u][v] = max(calc_prob(k-1,w,u) * q(v|w,u) * e(x_k, v)) for all w
+            probs[k][u][v] = max(calc_prob(k-1,w,u) * q(v|w,u) * e(x_k, v) over all w)
         :param k: The index of the word
         :param tag_k2: The tag two indexes prior
         :param tag_k1: The tag one index prior
@@ -71,9 +73,9 @@ class HiddenMarkovModel:
         Get the word at index k, with appropriate tranformations
         :param k: The index to get
         :param words: The list of words
-        :return: The word, lowercased and RARE-ified.
+        :return: The word, replaced by _RARE_ if it doesn't exist in the data.
         """
-        word = words[k].lower()
+        word = words[k]
         return RARE_WORD if word not in self.tag_probs else word
 
     def predict(self, words):
@@ -82,9 +84,11 @@ class HiddenMarkovModel:
         :param words: A list of words
         :return: A list of tags
         """
+        # Short circuit a mess of empty loops.
         if len(words) == 0:
             return []
 
+        # Setup.
         num_words = len(words)
         probs = defaultdict(
             lambda: defaultdict(
@@ -92,19 +96,25 @@ class HiddenMarkovModel:
                     lambda: -math.inf
         )))
         ptrs = defaultdict(lambda: defaultdict(dict))
-        probs[0][dr.WordTag.START][dr.WordTag.START] = 0
+
+        # Base case is 0, because log(1) = 0
+        probs[0][WordTag.START][WordTag.START] = 0
 
         for k in range(1, num_words+1):
             word = self.word(k - 1, words)
             # We don't have to look at all possible tags, because some have 0 probability given the word.
-            k2_tags = [dr.WordTag.START] if k < 3 else self.tag_probs[self.word(k - 3, words)].keys()
-            k1_tags = [dr.WordTag.START] if k == 1 else self.tag_probs[self.word(k - 2, words)].keys()
+            k2_tags = [WordTag.START] if k < 3 else self.tag_probs[self.word(k - 3, words)].keys()
+            k1_tags = [WordTag.START] if k == 1 else self.tag_probs[self.word(k - 2, words)].keys()
             k_tags = self.tag_probs[self.word(k - 1, words)].keys()
             for tag_k1 in k1_tags:
                 for tag_k in k_tags:
-                    best = max((
-                        (self.calc_prob(probs, k, tag_k2, tag_k1, tag_k, word), tag_k2)
-                        for tag_k2 in k2_tags), key=lambda x: x[0])
+                    # This performs max and argmax at the same time while limiting memory via generators
+                    # Basically, generate a tuple with the probability of each tag and the tag,
+                    # then select the tuple with the best prob, and assign the parts.
+                    best = max(
+                        ((self.calc_prob(probs, k, tag_k2, tag_k1, tag_k, word), tag_k2)
+                            for tag_k2 in k2_tags),
+                        key=lambda x: x[0])
                     probs[k][tag_k1][tag_k] = best[0]
                     ptrs[k][tag_k1][tag_k] = best[1]
 
@@ -112,8 +122,8 @@ class HiddenMarkovModel:
             best = None, None
             for tag in self.tags:
                 try:
-                    prob = probs[num_words][dr.WordTag.START][tag] \
-                           + self.grams[dr.WordTag.START][tag][dr.WordTag.STOP]
+                    prob = probs[num_words][WordTag.START][tag] \
+                           + self.grams[WordTag.START][tag][WordTag.STOP]
                 except KeyError:
                     prob = -math.inf
                 if best[0] is None or prob > best[0]:
@@ -127,7 +137,7 @@ class HiddenMarkovModel:
             for tag_k1 in ptrs[num_words][tag_k2].keys():
                 try:
                     prob = probs[num_words][tag_k2][tag_k1] \
-                           + self.grams[tag_k2][tag_k1][dr.WordTag.STOP]
+                           + self.grams[tag_k2][tag_k1][WordTag.STOP]
                 except KeyError:
                     prob = -math.inf
                 if best_pair is None or prob > best_pair[0]:
@@ -211,31 +221,31 @@ def main():
     Run the HMM on the collection of words and sentence parts.
     """
     # Load the training data
-    tags, grams = dr.read_training_data("data/UD_English/train.counts")
+    tags, grams = read_training_data("data/UD_English/train.counts")
     # Open the solution file, so we can check the accuracy as we go.
-    _, test_soln = dr.read_test_soln("data/UD_English/test.tags")
+    _, test_soln = read_test_soln("data/UD_English/test.tags")
     # Open the test features file
-    sentences = dr.read_sentences("data/UD_English/test.words")
+    sentences = read_sentences("data/UD_English/test.words")
     tags, grams = clean_data(tags, grams)
 
     model = HiddenMarkovModel([
-        dr.WordTag.ADJ,
-        dr.WordTag.ADV,
-        dr.WordTag.INTJ,
-        dr.WordTag.NOUN,
-        dr.WordTag.PROPN,
-        dr.WordTag.VERB,
-        dr.WordTag.ADP,
-        dr.WordTag.AUX,
-        dr.WordTag.CONJ,
-        dr.WordTag.DET,
-        dr.WordTag.NUM,
-        dr.WordTag.PART,
-        dr.WordTag.PRON,
-        dr.WordTag.SCONJ,
-        dr.WordTag.PUNCT,
-        dr.WordTag.SYM,
-        dr.WordTag.X
+        WordTag.ADJ,
+        WordTag.ADV,
+        WordTag.INTJ,
+        WordTag.NOUN,
+        WordTag.PROPN,
+        WordTag.VERB,
+        WordTag.ADP,
+        WordTag.AUX,
+        WordTag.CONJ,
+        WordTag.DET,
+        WordTag.NUM,
+        WordTag.PART,
+        WordTag.PRON,
+        WordTag.SCONJ,
+        WordTag.PUNCT,
+        WordTag.SYM,
+        WordTag.X
     ]).fit(tags, grams[3])
 
     total = 0.0
@@ -245,7 +255,7 @@ def main():
         if i % 20 == 0 and total > 0:
             print("progress: %d/%d, accuracy: %d/%d = %.4f%%" \
                   % (i, len(sentences), accurate, total, accurate/total * 100))
-        pred = model.predict(sentence)
+        pred = model.predict([w.lower() for w in sentence])
         total += len(pred)
         if len(pred) == 0 and pred[0] == test_soln[i][0]:
             accurate += 1
@@ -253,7 +263,7 @@ def main():
             matches = np.array(pred) == np.array(test_soln[i])
             accurate += matches.sum()
         solns.append(pred)
-    dr.write_output(sentences, solns, 'output/test.soln')
+    write_output(sentences, solns, 'output/test.soln')
 
 if __name__ == "__main__":
     main()
