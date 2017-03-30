@@ -9410,7 +9410,7 @@ after ADP
 thanksgiving PROPN
 
 sorry INTJ
-again ADJ
+again ADV
 
 per X
 my X
@@ -9813,7 +9813,7 @@ the ADP
 10 X
 initially ADV
 discussed VERB
-) ADJ
+) PUNCT
 
 Mark PROPN
 
@@ -13840,7 +13840,7 @@ ruth.penyc...@bbc.co.uk PROPN
 > PUNCT
 
 Hello INTJ
-there ADJ
+there X
 
 Action PROPN
 Network PROPN
@@ -15522,9 +15522,9 @@ It PRON
 is VERB
 a DET
 place NOUN
-in ADV
+in ADP
 Argentina PROPN
-lol ADJ
+lol INTJ
 
 Does AUX
 anyone NOUN

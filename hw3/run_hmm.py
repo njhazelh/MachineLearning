@@ -10,32 +10,82 @@ import hw3.hmm.data_reader as dr
 RARE_WORD = '_RARE_'
 
 class HiddenMarkovModel:
+    """
+    This class represents a Hidden Markov Model that can be used
+    to tag sequences of data (eg. tag words in a sentence with
+    their part of speech).
+    
+    This algorithm minimizes the sum of the log probabilities
+    rather than the product of the probabilities.  Doing so
+    prevents the possibility of underflow issues for long
+    sentences.
+    """
+
     def __init__(self, tags):
+        """
+        Init the model
+        :param tags: A list containing the legal tags (excluding START and STOP).
+        """
         self.tags = tags
 
-    def fit(self, tag_counts, grams):
-        self.tag_counts = tag_counts
+    def fit(self, tag_probs, grams):
+        """
+        Setup the training data in the model. Unlink other algorithms,
+        this doesn't do much.
+        :param tag_probs: A dictionary mapping words -> tag -> prob(word|tag)
+        :param grams: A dictionary mapping tag trigrams to probabilities.
+            depths must be ordered such that
+            grams[tag_k2][tag_k1][tag_k] = p(tag_k|tag_k-1=tag_k1, tag_k-2=tag_k2)
+        :return: `self` to make chaining easy
+        """
+        self.tag_probs = tag_probs
         self.grams = grams
+        return self
 
     def calc_prob(self, probs, k, tag_k2, tag_k1, tag_k, word):
-        if word not in self.tag_counts:
+        """
+        Get the probability of seeing tag_k at point k, given the
+        word being tagged, tag_k2, tag_k1, and previous probabilities.
+        :param probs: A dict containing the probailities of lower levels of the
+            viterbi algorithm.
+            probs[k][u][v] = max(calc_prob(k-1,w,u) * q(v|w,u) * e(x_k, v)) for all w
+        :param k: The index of the word
+        :param tag_k2: The tag two indexes prior
+        :param tag_k1: The tag one index prior
+        :param tag_k: The tag of the word
+        :param word: The word
+        :return: The sum of the log probabilities of seeing this data.
+        """
+        if word not in self.tag_probs:
             word = RARE_WORD
         try:
             prev = probs[k-1][tag_k2][tag_k1]
-            q = self.grams[3][tag_k2][tag_k1][tag_k]
-            e = self.tag_counts[word][tag_k]
+            q = self.grams[tag_k2][tag_k1][tag_k]
+            e = self.tag_probs[word][tag_k]
             return prev + e + q
         except KeyError:
             return -math.inf
 
-    def word(self, k, X):
-        return RARE_WORD if X[k].lower() not in self.tag_counts else X[k].lower()
+    def word(self, k, words):
+        """
+        Get the word at index k, with appropriate tranformations
+        :param k: The index to get
+        :param words: The list of words
+        :return: The word, lowercased and RARE-ified.
+        """
+        word = words[k].lower()
+        return RARE_WORD if word not in self.tag_probs else word
 
-    def predict(self, X):
-        if len(X) == 0:
+    def predict(self, words):
+        """
+        Find the best sequence of characters to represent this data.
+        :param words: A list of words
+        :return: A list of tags
+        """
+        if len(words) == 0:
             return []
 
-        num_words = len(X)
+        num_words = len(words)
         probs = defaultdict(
             lambda: defaultdict(
                 lambda: defaultdict(
@@ -43,13 +93,13 @@ class HiddenMarkovModel:
         )))
         ptrs = defaultdict(lambda: defaultdict(dict))
         probs[0][dr.WordTag.START][dr.WordTag.START] = 0
-        S = {-1: [dr.WordTag.START], 0: [dr.WordTag.START]}
 
         for k in range(1, num_words+1):
-            word = self.word(k-1, X)
-            k2_tags = [dr.WordTag.START] if k < 3 else self.tag_counts[self.word(k-3, X)].keys()
-            k1_tags = [dr.WordTag.START] if k == 1 else self.tag_counts[self.word(k-2, X)].keys()
-            k_tags = self.tags
+            word = self.word(k - 1, words)
+            # We don't have to look at all possible tags, because some have 0 probability given the word.
+            k2_tags = [dr.WordTag.START] if k < 3 else self.tag_probs[self.word(k - 3, words)].keys()
+            k1_tags = [dr.WordTag.START] if k == 1 else self.tag_probs[self.word(k - 2, words)].keys()
+            k_tags = self.tag_probs[self.word(k - 1, words)].keys()
             for tag_k1 in k1_tags:
                 for tag_k in k_tags:
                     best = max((
@@ -58,12 +108,12 @@ class HiddenMarkovModel:
                     probs[k][tag_k1][tag_k] = best[0]
                     ptrs[k][tag_k1][tag_k] = best[1]
 
-        if len(X) == 1:
+        if len(words) == 1:
             best = None, None
             for tag in self.tags:
                 try:
                     prob = probs[num_words][dr.WordTag.START][tag] \
-                           + self.grams[3][dr.WordTag.START][tag][dr.WordTag.STOP]
+                           + self.grams[dr.WordTag.START][tag][dr.WordTag.STOP]
                 except KeyError:
                     prob = -math.inf
                 if best[0] is None or prob > best[0]:
@@ -77,7 +127,7 @@ class HiddenMarkovModel:
             for tag_k1 in ptrs[num_words][tag_k2].keys():
                 try:
                     prob = probs[num_words][tag_k2][tag_k1] \
-                           + self.grams[3][tag_k2][tag_k1][dr.WordTag.STOP]
+                           + self.grams[tag_k2][tag_k1][dr.WordTag.STOP]
                 except KeyError:
                     prob = -math.inf
                 if best_pair is None or prob > best_pair[0]:
@@ -92,7 +142,22 @@ class HiddenMarkovModel:
         return labels
 
 def clean_data(tags, grams):
-    # Find rare words and move them to the rare-words
+    """
+    Do some data manipulation before training
+    :param tags: A dict containing counts of words and tags.
+        tags[word][tag] = count(word with tag)
+    :param grams: A dict containing the counts of different N-Grams
+        tags[3][w][u][v] = count(WUV)
+        tags[2][u][v] = count(UV)
+        tags[1][v] = count(V)
+    :return:
+        tags where
+            - The words have been lowercased
+            - Words with less than 5 occurences are filed under RARE
+            - counts are converted to log(p(word|tag))
+        grams where
+            - counts are converted to log(p(w|UV))
+    """
     remove_words = []
     for word in {word for word in tags if word != word.lower()}:
         word_lower = word.lower()
@@ -109,6 +174,7 @@ def clean_data(tags, grams):
     for word in remove_words:
         del tags[word]
 
+    # Find rare words and move them to the rare-words
     tags[RARE_WORD] = {}
     remove_words = []
     for word in tags:
@@ -141,8 +207,15 @@ def clean_data(tags, grams):
     return tags, grams
 
 def main():
+    """
+    Run the HMM on the collection of words and sentence parts.
+    """
+    # Load the training data
     tags, grams = dr.read_training_data("data/UD_English/train.counts")
-
+    # Open the solution file, so we can check the accuracy as we go.
+    _, test_soln = dr.read_test_soln("data/UD_English/test.tags")
+    # Open the test features file
+    sentences = dr.read_sentences("data/UD_English/test.words")
     tags, grams = clean_data(tags, grams)
 
     model = HiddenMarkovModel([
@@ -163,17 +236,13 @@ def main():
         dr.WordTag.PUNCT,
         dr.WordTag.SYM,
         dr.WordTag.X
-    ])
-    model.fit(tags, grams)
-
-    _, test_soln = dr.read_test_soln("data/UD_English/test.tags")
+    ]).fit(tags, grams[3])
 
     total = 0.0
     accurate = 0.0
     solns = []
-    sentences = dr.read_sentences("data/UD_English/test.words")
     for i, sentence in enumerate(sentences):
-        if i % 10 == 0 and total > 0:
+        if i % 20 == 0 and total > 0:
             print("progress: %d/%d, accuracy: %d/%d = %.4f%%" \
                   % (i, len(sentences), accurate, total, accurate/total * 100))
         pred = model.predict(sentence)
